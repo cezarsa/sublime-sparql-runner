@@ -94,7 +94,7 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
 
         for line in bindings:
             for i, varname in enumerate(variables):
-                value = line[varname]['value']
+                line[varname]['value'] = value = self.replace_prefix(line[varname]['value'], prefixes)
                 if len(value) > max_column_size[i]:
                     max_column_size[i] = len(value)
 
@@ -109,7 +109,7 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
 
         for line in bindings:
             for i, varname in enumerate(variables):
-                value = self.replace_prefix(line[varname]['value'], prefixes)
+                value = line[varname]['value']
                 output.append(value + " " * (max_column_size[i] - len(value) + column_padding))
             output.append("\n")
 

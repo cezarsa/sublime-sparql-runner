@@ -1,0 +1,6 @@
+[
+    {
+        "caption": "Run SPARQL Query",
+        "command": "run_sparql"
+    }
+]

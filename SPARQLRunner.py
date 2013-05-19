@@ -10,12 +10,21 @@ except ImportError:
 
 from json import loads
 import threading
+import re
 
 import sublime
 import sublime_plugin
 
 
 PROGRESS = ['-', '\\', '|', '/']
+DEFAULT_PREFIXES = [
+    ('rdf:',  'http://www.w3.org/1999/02/22-rdf-syntax-ns#'),
+    ('rdfs:', 'http://www.w3.org/2000/01/rdf-schema#'),
+    ('xsd:',  'http://www.w3.org/2001/XMLSchema#'),
+    ('fn:',   'http://www.w3.org/2005/xpath-functions#')
+]
+
+PREFIX_REGEX = re.compile(r'^\s*prefix\s+(.*?)\s+<(.*?)>\s*$', re.MULTILINE | re.IGNORECASE)
 
 
 class QueryRunner(threading.Thread):
@@ -63,17 +72,21 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
         if not thread.result:
             return
 
+        prefixes = self.parse_prefixes(thread.query)
         sublime.status_message('Query successfully run on %s' % thread.server)
         self.view.erase_status('sparql_query')
         new_view = self.view.window().new_file()
         new_view.run_command('append', {
-            'characters': self.format_result(thread.result)
+            'characters': self.format_result(thread.result, prefixes)
         })
         new_view.set_scratch(True)
         new_view.set_read_only(True)
         new_view.set_name("SPARQL Query Results")
 
-    def format_result(self, result):
+    def parse_prefixes(self, query):
+        return PREFIX_REGEX.findall(query)
+
+    def format_result(self, result, prefixes):
         bindings = result['results']['bindings']
         variables = result['head']['vars']
         max_column_size = [len(varname) for varname in variables]
@@ -96,11 +109,17 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
 
         for line in bindings:
             for i, varname in enumerate(variables):
-                value = line[varname]['value']
+                value = self.replace_prefix(line[varname]['value'], prefixes)
                 output.append(value + " " * (max_column_size[i] - len(value) + column_padding))
             output.append("\n")
 
         return "".join(output)
+
+    def replace_prefix(self, value, prefixes):
+        for prefix, url in DEFAULT_PREFIXES + prefixes:
+            if value.find(url) == 0:
+                return value.replace(url, prefix)
+        return value
 
     def run(self, edit):
         settings = self.view.settings()

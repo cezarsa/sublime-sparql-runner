@@ -23,7 +23,6 @@ DEFAULT_PREFIXES = [
     ('xsd:',  'http://www.w3.org/2001/XMLSchema#'),
     ('fn:',   'http://www.w3.org/2005/xpath-functions#')
 ]
-
 PREFIX_REGEX = re.compile(r'^\s*prefix\s+(.*?)\s+<(.*?)>\s*$', re.MULTILINE | re.IGNORECASE)
 
 
@@ -32,6 +31,52 @@ class QueryRunner(threading.Thread):
         self.server = server
         self.query = query
         super(QueryRunner, self).__init__(self)
+
+    def parse_prefixes(self):
+        return PREFIX_REGEX.findall(self.query)
+
+    def replace_prefix(self, value, prefixes):
+        for prefix, url in DEFAULT_PREFIXES + prefixes:
+            if value.find(url) == 0:
+                return value.replace(url, prefix)
+        return value
+
+    def format_result(self, result):
+        prefixes = self.parse_prefixes()
+        bindings = result['results']['bindings']
+        variables = result['head']['vars']
+        number_of_variables = len(variables)
+        max_column_size = [len(varname) for varname in variables]
+        column_padding = 2
+
+        for line in bindings:
+            for i, varname in enumerate(variables):
+                line[varname]['value'] = value = self.replace_prefix(line[varname]['value'], prefixes)
+                if len(value) > max_column_size[i]:
+                    max_column_size[i] = len(value)
+
+        output = []
+        for i, varname in enumerate(variables):
+            output.append(varname + " " * (max_column_size[i] - len(varname)))
+            if i < number_of_variables - 1:
+                output.append(" " * column_padding)
+        output.append("\n")
+
+        for i, varname in enumerate(variables):
+            output.append("-" * max_column_size[i])
+            if i < number_of_variables - 1:
+                output.append(" " * column_padding)
+        output.append("\n\n")
+
+        for line in bindings:
+            for i, varname in enumerate(variables):
+                value = line[varname]['value']
+                output.append(value + " " * (max_column_size[i] - len(value)))
+                if i < number_of_variables - 1:
+                    output.append(" " * column_padding)
+            output.append("\n")
+
+        return "".join(output)
 
     def run(self):
         try:
@@ -42,7 +87,8 @@ class QueryRunner(threading.Thread):
 
             url = self.server + '?' + urlencode(params)
             response = urlopen(url)
-            self.result = loads(response.read().decode("utf-8"))
+            result_dict = loads(response.read().decode("utf-8"))
+            self.result = self.format_result(result_dict)
         except Exception as e:
             err = '%s: Error %s running query' % (__name__, str(e))
             sublime.error_message(err)
@@ -72,54 +118,15 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
         if not thread.result:
             return
 
-        prefixes = self.parse_prefixes(thread.query)
         sublime.status_message('Query successfully run on %s' % thread.server)
         self.view.erase_status('sparql_query')
         new_view = self.view.window().new_file()
         new_view.run_command('append', {
-            'characters': self.format_result(thread.result, prefixes)
+            'characters': thread.result
         })
         new_view.set_scratch(True)
         new_view.set_read_only(True)
         new_view.set_name("SPARQL Query Results")
-
-    def parse_prefixes(self, query):
-        return PREFIX_REGEX.findall(query)
-
-    def format_result(self, result, prefixes):
-        bindings = result['results']['bindings']
-        variables = result['head']['vars']
-        max_column_size = [len(varname) for varname in variables]
-        column_padding = 2
-
-        for line in bindings:
-            for i, varname in enumerate(variables):
-                line[varname]['value'] = value = self.replace_prefix(line[varname]['value'], prefixes)
-                if len(value) > max_column_size[i]:
-                    max_column_size[i] = len(value)
-
-        output = []
-        for i, varname in enumerate(variables):
-            output.append(varname + " " * (max_column_size[i] - len(varname) + column_padding))
-        output.append("\n")
-
-        for i, varname in enumerate(variables):
-            output.append("-" * max_column_size[i] + " " * column_padding)
-        output.append("\n\n")
-
-        for line in bindings:
-            for i, varname in enumerate(variables):
-                value = line[varname]['value']
-                output.append(value + " " * (max_column_size[i] - len(value) + column_padding))
-            output.append("\n")
-
-        return "".join(output)
-
-    def replace_prefix(self, value, prefixes):
-        for prefix, url in DEFAULT_PREFIXES + prefixes:
-            if value.find(url) == 0:
-                return value.replace(url, prefix)
-        return value
 
     def run(self, edit):
         settings = self.view.settings()

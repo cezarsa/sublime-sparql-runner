@@ -51,9 +51,12 @@ class QueryRunner(threading.Thread):
 
         for line in bindings:
             for i, varname in enumerate(variables):
-                line[varname]['value'] = value = self.replace_prefix(line[varname]['value'], prefixes)
-                if len(value) > max_column_size[i]:
-                    max_column_size[i] = len(value)
+                variable_entry = line.get(varname, {})
+                variable_value = variable_entry.get('value', '')
+                variable_entry['value'] = variable_value = self.replace_prefix(variable_value, prefixes)
+                line[varname] = variable_entry
+                if len(variable_value) > max_column_size[i]:
+                    max_column_size[i] = len(variable_value)
 
         output = []
         for i, varname in enumerate(variables):

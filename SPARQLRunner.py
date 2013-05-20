@@ -30,7 +30,7 @@ class QueryRunner(threading.Thread):
     def __init__(self, server, query):
         self.server = server
         self.query = query
-        super(QueryRunner, self).__init__(self)
+        super(QueryRunner, self).__init__()
 
     def parse_prefixes(self):
         return PREFIX_REGEX.findall(self.query)
@@ -121,12 +121,13 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
         sublime.status_message('Query successfully run on %s' % thread.server)
         self.view.erase_status('sparql_query')
         new_view = self.view.window().new_file()
-        new_view.run_command('append', {
+        new_view.run_command('insert', {
             'characters': thread.result
         })
         new_view.set_scratch(True)
         new_view.set_read_only(True)
         new_view.set_name("SPARQL Query Results")
+        new_view.settings().set('word_wrap', False)
 
     def run(self, edit):
         settings = self.view.settings()

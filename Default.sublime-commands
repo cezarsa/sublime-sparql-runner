@@ -1,6 +1,10 @@
 [
     {
-        "caption": "Run SPARQL Query",
+        "caption": "SPARQL: Run query",
         "command": "run_sparql"
+    },
+    {
+        "caption": "SPARQL: Select endpoint",
+        "command": "select_sparql_endpoint"
     }
 ]

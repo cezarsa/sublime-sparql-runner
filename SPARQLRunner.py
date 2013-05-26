@@ -24,12 +24,14 @@ DEFAULT_PREFIXES = [
     ('fn:',   'http://www.w3.org/2005/xpath-functions#')
 ]
 PREFIX_REGEX = re.compile(r'^\s*prefix\s+(.*?)\s+<(.*?)>\s*$', re.MULTILINE | re.IGNORECASE)
+SETTINGS_FILE = 'SPARQLRunner.sublime-settings'
 
 
 class QueryRunner(threading.Thread):
     def __init__(self, server, query):
         self.server = server
         self.query = query
+        self.result = None
         super(QueryRunner, self).__init__()
 
     def parse_prefixes(self):
@@ -95,7 +97,6 @@ class QueryRunner(threading.Thread):
         except Exception as e:
             err = '%s: Error %s running query' % (__name__, str(e))
             sublime.error_message(err)
-            self.result = None
 
 
 class RunSparqlCommand(sublime_plugin.TextCommand):
@@ -118,28 +119,97 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
             sublime.set_timeout(lambda: self.handle_thread(thread, (i + 1) % len(PROGRESS)), 100)
             return
 
+        self.view.erase_status('sparql_query')
+
         if not thread.result:
             return
 
         sublime.status_message('Query successfully run on %s' % thread.server)
-        self.view.erase_status('sparql_query')
         new_view = self.view.window().new_file()
+        new_view.settings().set('word_wrap', False)
+        new_view.set_name("SPARQL Query Results")
         new_view.run_command('insert', {
             'characters': thread.result
         })
         new_view.set_scratch(True)
         new_view.set_read_only(True)
-        new_view.set_name("SPARQL Query Results")
-        new_view.settings().set('word_wrap', False)
 
     def run(self, edit):
-        settings = self.view.settings()
-        server = settings.get('sparql_endpoint')
-        if (not server) or len(server) == 0:
-            sublime.error_message("You should add 'sparql_endpoint' setting to your preferences file.")
+        self.settings = sublime.load_settings(SETTINGS_FILE)
+        server = self.settings.get('current_endpoint', None)
+        if not server:
+            sublime.error_message("You should add/select an endpoint using 'SPARQL: Select endpoint' command.")
             return
 
         query = self.get_selection() or self.get_full_text()
         query_thread = QueryRunner(server, query)
         query_thread.start()
         self.handle_thread(query_thread)
+
+
+class SelectSparqlEndpointThread(threading.Thread):
+
+    def __init__(self, window):
+        super(SelectSparqlEndpointThread, self).__init__()
+        self.window = window
+
+    def gather_endpoints(self):
+        self.settings = sublime.load_settings(SETTINGS_FILE)
+        self.current_endpoint = self.settings.get('current_endpoint', None)
+        self.sparql_endpoints = self.settings.get('sparql_endpoints', [])
+
+        self.endpoints = [
+            ['Add new endpoint...', ''],
+        ]
+
+        for endpoint in self.sparql_endpoints:
+            url = endpoint['url']
+            name = endpoint['name']
+            if url == self.current_endpoint:
+                name = "*%s" % name
+            self.endpoints.append([name, url])
+
+    def add_endpoint(self, name, url):
+        self.settings.set('sparql_endpoints', self.sparql_endpoints + [
+            {
+                'name': name,
+                'url': url
+            }
+        ])
+        self.set_as_current(url)
+
+    def set_as_current(self, url):
+        self.settings.set('current_endpoint', url)
+        sublime.save_settings(SETTINGS_FILE)
+
+    def run(self):
+        self.gather_endpoints()
+        self.window.show_quick_panel(self.endpoints, self.on_panel_select_done)
+
+    def on_panel_select_done(self, selected):
+        if selected < 0:
+            return
+
+        if selected == 0:
+            self.window.show_input_panel('Endpoint name', '', self.on_name_done, self.on_change, self.on_cancel)
+            return
+        self.set_as_current(self.endpoints[selected][1])
+
+    def on_name_done(self, name):
+        self.name = name
+        self.window.show_input_panel('Endpoint url', '', self.on_url_done, self.on_change, self.on_cancel)
+
+    def on_url_done(self, url):
+        self.add_endpoint(self.name, url)
+
+    def on_change(self, name):
+        pass
+
+    def on_cancel(self):
+        pass
+
+
+class SelectSparqlEndpointCommand(sublime_plugin.WindowCommand):
+
+    def run(self):
+        SelectSparqlEndpointThread(self.window).start()

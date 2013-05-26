@@ -1,0 +1,9 @@
+{
+    "sparql_endpoints": [
+        {
+            "name": "dbpedia",
+            "url": "http://dbpedia.org/sparql"
+        }
+    ],
+    "current_endpoint": ""
+}

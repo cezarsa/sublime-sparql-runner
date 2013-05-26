@@ -17,28 +17,23 @@ import sublime_plugin
 
 
 PROGRESS = ['-', '\\', '|', '/']
-DEFAULT_PREFIXES = [
-    ('rdf:',  'http://www.w3.org/1999/02/22-rdf-syntax-ns#'),
-    ('rdfs:', 'http://www.w3.org/2000/01/rdf-schema#'),
-    ('xsd:',  'http://www.w3.org/2001/XMLSchema#'),
-    ('fn:',   'http://www.w3.org/2005/xpath-functions#')
-]
 PREFIX_REGEX = re.compile(r'^\s*prefix\s+(.*?)\s+<(.*?)>\s*$', re.MULTILINE | re.IGNORECASE)
 SETTINGS_FILE = 'SPARQLRunner.sublime-settings'
 
 
 class QueryRunner(threading.Thread):
-    def __init__(self, server, query):
+    def __init__(self, server, query, settings):
         self.server = server
         self.query = query
         self.result = None
+        self.settings = settings
         super(QueryRunner, self).__init__()
 
     def parse_prefixes(self):
-        return PREFIX_REGEX.findall(self.query)
+        return self.settings.get('prefixes', []) + PREFIX_REGEX.findall(self.query)
 
     def replace_prefix(self, value, prefixes):
-        for prefix, url in DEFAULT_PREFIXES + prefixes:
+        for prefix, url in prefixes:
             if value.find(url) == 0:
                 return value.replace(url, prefix)
         return value
@@ -142,7 +137,7 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
             return
 
         query = self.get_selection() or self.get_full_text()
-        query_thread = QueryRunner(server, query)
+        query_thread = QueryRunner(server, query, self.settings)
         query_thread.start()
         self.handle_thread(query_thread)
 

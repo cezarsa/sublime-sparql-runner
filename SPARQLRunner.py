@@ -22,15 +22,15 @@ SETTINGS_FILE = 'SPARQLRunner.sublime-settings'
 
 
 class QueryRunner(threading.Thread):
-    def __init__(self, server, query, settings):
+    def __init__(self, server, query, prefixes):
         self.server = server
         self.query = query
         self.result = None
-        self.settings = settings
+        self.prefixes = prefixes
         super(QueryRunner, self).__init__()
 
     def parse_prefixes(self):
-        return self.settings.get('prefixes', []) + PREFIX_REGEX.findall(self.query)
+        return self.prefixes + PREFIX_REGEX.findall(self.query)
 
     def replace_prefix(self, value, prefixes):
         for prefix, url in prefixes:
@@ -123,9 +123,16 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
         new_view = self.view.window().new_file()
         new_view.settings().set('word_wrap', False)
         new_view.set_name("SPARQL Query Results")
-        new_view.run_command('insert', {
-            'characters': thread.result
-        })
+        try:
+            # Sublime Text 2 way
+            edit = new_view.begin_edit()
+            new_view.insert(edit, 0, thread.result)
+            new_view.end_edit(edit)
+        except:
+            new_view.run_command('append', {
+                'characters': thread.result
+            })
+        new_view.run_command("goto_line", {"line": 1})
         new_view.set_scratch(True)
         new_view.set_read_only(True)
 
@@ -137,19 +144,20 @@ class RunSparqlCommand(sublime_plugin.TextCommand):
             return
 
         query = self.get_selection() or self.get_full_text()
-        query_thread = QueryRunner(server, query, self.settings)
+        prefixes = self.settings.get('prefixes', [])
+        query_thread = QueryRunner(server, query, prefixes)
         query_thread.start()
         self.handle_thread(query_thread)
 
 
-class SelectSparqlEndpointThread(threading.Thread):
+class SelectSparqlEndpointCommand(sublime_plugin.WindowCommand):
 
-    def __init__(self, window):
-        super(SelectSparqlEndpointThread, self).__init__()
-        self.window = window
+    def run(self):
+        self.settings = sublime.load_settings(SETTINGS_FILE)
+        self.gather_endpoints()
+        self.window.show_quick_panel(self.endpoints, self.on_panel_select_done)
 
     def gather_endpoints(self):
-        self.settings = sublime.load_settings(SETTINGS_FILE)
         self.current_endpoint = self.settings.get('current_endpoint', None)
         self.sparql_endpoints = self.settings.get('sparql_endpoints', [])
 
@@ -177,10 +185,6 @@ class SelectSparqlEndpointThread(threading.Thread):
         self.settings.set('current_endpoint', url)
         sublime.save_settings(SETTINGS_FILE)
 
-    def run(self):
-        self.gather_endpoints()
-        self.window.show_quick_panel(self.endpoints, self.on_panel_select_done)
-
     def on_panel_select_done(self, selected):
         if selected < 0:
             return
@@ -202,9 +206,3 @@ class SelectSparqlEndpointThread(threading.Thread):
 
     def on_cancel(self):
         pass
-
-
-class SelectSparqlEndpointCommand(sublime_plugin.WindowCommand):
-
-    def run(self):
-        SelectSparqlEndpointThread(self.window).start()

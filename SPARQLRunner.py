@@ -82,7 +82,7 @@ class QueryRunner(threading.Thread):
         try:
             params = {
                 'query': self.query,
-                'format': 'json'
+                'format': 'application/sparql-results+json'
             }
 
             url = self.server + '?' + urlencode(params)

@@ -70,7 +70,7 @@ class QueryRunner(threading.Thread):
 
         for line in bindings:
             for i, varname in enumerate(variables):
-                value = line[varname]['value']
+                value = line[varname]['value'].replace('\n', '\\n').replace('\r', '\\r')
                 output.append(value + " " * (max_column_size[i] - len(value)))
                 if i < number_of_variables - 1:
                     output.append(" " * column_padding)

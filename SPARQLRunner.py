@@ -4,9 +4,9 @@ except ImportError:
     from urllib import urlencode
 
 try:
-    from urllib.request import urlopen
+    from urllib.request import urlopen, Request
 except ImportError:
-    from urllib2 import urlopen
+    from urllib2 import urlopen, Request
 
 from json import loads
 import threading
@@ -86,7 +86,9 @@ class QueryRunner(threading.Thread):
             }
 
             url = self.server + '?' + urlencode(params)
-            response = urlopen(url)
+            req = Request(url)
+            req.add_header('Accept', 'application/sparql-results+json')
+            response = urlopen(req)
             result_dict = loads(response.read().decode("utf-8"))
             self.result = self.format_result(result_dict)
         except Exception as e:
